@@ -1,5 +1,10 @@
-import { Stack } from "expo-router";
+import { Stack } from 'expo-router';
+import { ReportsProvider } from '../lib/ReportsContext';
 
 export default function RootLayout() {
-  return <Stack />;
+  return (
+    <ReportsProvider>
+      <Stack screenOptions={{ headerShown: false }} />
+    </ReportsProvider>
+  );
 }
