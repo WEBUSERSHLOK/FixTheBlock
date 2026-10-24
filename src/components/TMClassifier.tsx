@@ -5,8 +5,9 @@
 // The browser version of the app uses TMClassifier.web.tsx instead.
 
 import { forwardRef, useImperativeHandle, useRef } from 'react';
+import type { ComponentType, Ref } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { WebView, WebViewMessageEvent } from 'react-native-webview';
+import { WebView, WebViewMessageEvent, WebViewProps } from 'react-native-webview';
 import { MODEL_URL } from '../constants/fmb';
 import { ClassifierHandle, PREP_IMAGE_JS, Prediction, TM_SCRIPTS, toIssueScores } from '../lib/classifier';
 
@@ -32,10 +33,16 @@ window.classify = async (id, src) => {
 };
 </script></body></html>`;
 
+// The WebView package's built-in types don't work with newer React versions
+// (every prop shows up as 'never'), so we describe the parts we use ourselves.
+// This only affects TypeScript checking, not how the app runs.
+type WebViewHandle = { injectJavaScript: (js: string) => void };
+const HiddenWebView = WebView as unknown as ComponentType<WebViewProps & { ref?: Ref<WebViewHandle> }>;
+
 type Pending = { resolve: (s: number[]) => void; reject: (e: Error) => void };
 
 const TMClassifier = forwardRef<ClassifierHandle>(function TMClassifier(_props, ref) {
-  const webRef = useRef<WebView>(null);
+  const webRef = useRef<WebViewHandle>(null);
   // Photos waiting for an answer, matched up by id.
   const pending = useRef(new Map<number, Pending>());
   const nextId = useRef(1);
@@ -73,7 +80,7 @@ const TMClassifier = forwardRef<ClassifierHandle>(function TMClassifier(_props, 
 
   return (
     <View style={s.hidden} pointerEvents="none">
-      <WebView
+      <HiddenWebView
         ref={webRef}
         originWhitelist={['*']}
         source={{ html, baseUrl: 'https://localhost/' }}

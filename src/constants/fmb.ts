@@ -52,7 +52,7 @@ export const STATUS: Record<Status, { label: string; bg: string; fg: string; pin
 // Link to the trained Teachable Machine model. Must end with a slash.
 // Either the link from Teachable Machine's "Upload my model" button, or the
 // folder where model.json, metadata.json, and weights.bin are hosted.
-export const MODEL_URL = 'PASTE_YOUR_MODEL_LINK_HERE/';
+export const MODEL_URL = 'https://raw.githubusercontent.com/WEBUSERSHLOK/FixTheBlock/main/model/';
 
 // Where the map starts. Fallback spot for reports when location isn't shared.
 // TODO: set this to the center of your town so the map opens in the right place.
