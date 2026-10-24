@@ -52,8 +52,11 @@ export const STATUS: Record<Status, { label: string; bg: string; fg: string; pin
 // Link to the trained Teachable Machine model. Must end with a slash.
 // Either the link from Teachable Machine's "Upload my model" button, or the
 // folder where model.json, metadata.json, and weights.bin are hosted.
-export const MODEL_URL = 'https://raw.githubusercontent.com/WEBUSERSHLOK/FixTheBlock/main/model/';
+export const MODEL_URL = 'https://raw.githubusercontent.com/WEBUSERSHLOK/FixTheBlock/master/model/';
 
-// Where the map starts. Fallback spot for reports when location isn't shared.
-// TODO: set this to the center of your town so the map opens in the right place.
-export const MAP_CENTER = { latitude: 39.8283, longitude: -98.5795 };
+// The map opens zoomed out to show the whole United States. The deltas are how
+// much of the map fits on screen (bigger numbers = more zoomed out).
+export const US_REGION = { latitude: 39.5, longitude: -98.35, latitudeDelta: 32, longitudeDelta: 40 };
+
+// How far the map zooms in when it jumps to a single report (about a few blocks).
+export const REPORT_ZOOM = { latitudeDelta: 0.01, longitudeDelta: 0.01 };

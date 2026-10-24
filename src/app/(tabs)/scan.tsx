@@ -6,12 +6,13 @@ import { useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { C, ISSUE_TYPES, IssueType, MAP_CENTER, TYPE_LABELS } from '../../constants/fmb';
+import { C, ISSUE_TYPES, IssueType, TYPE_LABELS } from '../../constants/fmb';
 import { useReports } from '../../lib/ReportsContext';
+import { addressNear, findAddress } from '../../lib/address';
 import TMClassifier from '../../components/TMClassifier';
 import type { ClassifierHandle } from '../../lib/classifier';
 
@@ -26,20 +27,6 @@ type Step = 'camera' | 'analyzing' | 'result' | 'done';
 function toImageSrc(base64: string | null | undefined, uri: string) {
   if (!base64) return uri;
   return base64.startsWith('data:') ? base64 : `data:image/jpeg;base64,${base64}`;
-}
-
-// Phone photos usually store where they were taken. This pulls out those
-// coordinates so an uploaded photo gets pinned in the right place.
-// Returns null if the photo has none (screenshots, web images, or location
-// tagging turned off).
-function gpsFromExif(exif: Record<string, any> | null | undefined) {
-  if (!exif) return null;
-  let lat = Number(exif.GPSLatitude);
-  let lng = Number(exif.GPSLongitude);
-  if (!isFinite(lat) || !isFinite(lng) || (lat === 0 && lng === 0)) return null;
-  if (exif.GPSLatitudeRef === 'S' && lat > 0) lat = -lat;
-  if (exif.GPSLongitudeRef === 'W' && lng > 0) lng = -lng;
-  return { latitude: lat, longitude: lng };
 }
 
 export default function Scan() {
@@ -58,10 +45,13 @@ export default function Scan() {
   const [note, setNote] = useState('');
   const [sending, setSending] = useState(false);
   const [newId, setNewId] = useState<number | null>(null);
-  const [usedGps, setUsedGps] = useState(true);
-  // Where an uploaded photo was taken (from the photo's GPS data), if available.
-  const [photoCoords, setPhotoCoords] = useState<{ latitude: number; longitude: number } | null>(null);
-
+  // Camera photos use the phone's location, since you're standing at the problem.
+  // Uploaded photos could have been taken anywhere (and you might be at home),
+  // so for those the person types the nearest address instead.
+  const [isUpload, setIsUpload] = useState(false);
+  const [address, setAddress] = useState(''); // typed address, for uploads
+  const [pinned, setPinned] = useState(true); // whether the report got a map pin
+  const [sentStreet, setSentStreet] = useState(''); // address shown on the confirmation screen
   // The AI's best guess: whichever issue type got the highest score.
   const topIdx = conf.length ? conf.indexOf(Math.max(...conf)) : 0;
   const topType: IssueType = ISSUE_TYPES[topIdx];
@@ -72,7 +62,8 @@ export default function Scan() {
     setPhoto(null);
     setConf([]);
     setNote('');
-    setPhotoCoords(null);
+    setAddress('');
+    setIsUpload(false);
   };
 
   // Runs the AI on a photo. Used by both the camera and the upload button.
@@ -96,7 +87,7 @@ export default function Scan() {
   const shoot = async () => {
     const pic = await cameraRef.current?.takePictureAsync({ quality: 0.5, exif: false, base64: true });
     if (!pic) return;
-    setPhotoCoords(null);
+    setIsUpload(false);
     await analyze(pic.uri, toImageSrc(pic.base64, pic.uri));
   };
 
@@ -106,37 +97,37 @@ export default function Scan() {
       mediaTypes: ['images'],
       quality: 0.5,
       base64: true, // so the AI can read it
-      exif: true, // read only to find where the photo was taken
     });
     if (res.canceled || !res.assets[0]) return;
     const asset = res.assets[0];
-    setPhotoCoords(gpsFromExif(asset.exif));
+    setIsUpload(true);
     await analyze(asset.uri, toImageSrc(asset.base64, asset.uri));
   };
 
-  // Send report button. Figures out the location, then saves the report.
-  // Location is only read here, once, and only with permission. We never
-  // track anyone. An uploaded photo uses the spot where it was taken instead
-  // of where you are now.
+  // Send report button. Figures out where the problem is, then saves the report.
+  //   Uploaded photo: look up the address the person typed.
+  //   Camera photo: read the phone's location once (with permission), then
+  //   find the nearest street address for the label. We never track anyone.
+  // If no location is available, the report still saves, just without a pin.
   const send = async () => {
     setSending(true);
-    let coords = MAP_CENTER;
+    let coords: { latitude: number; longitude: number } | null = null;
     let street = 'Location not shared';
-    if (photoCoords) {
-      coords = photoCoords;
-      street = 'Where the photo was taken';
-      setUsedGps(true);
+
+    if (isUpload) {
+      street = address.trim();
+      coords = await findAddress(street);
     } else {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
         const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-        street = 'Your location';
-        setUsedGps(true);
-      } else {
-        setUsedGps(false); // TODO: let the user drop a pin or type an address instead
+        street = (await addressNear(coords)) ?? 'Your location';
       }
     }
+    setPinned(!!coords);
+    setSentStreet(street);
+
     // Save the report so it shows up on every tab.
     const id = addReport({
       type: topType,
@@ -145,7 +136,9 @@ export default function Scan() {
       conf: conf[topIdx],
       note: note.trim() || undefined,
       photoUri: photo ?? undefined,
-      ...coords,
+      latitude: coords?.latitude ?? 0,
+      longitude: coords?.longitude ?? 0,
+      located: !!coords,
     });
     setNewId(id);
     setSending(false);
@@ -246,6 +239,14 @@ export default function Scan() {
                   </View>
                 </View>
               ))}
+              {/* Warn people when the AI isn't sure, since it might be wrong */}
+              {conf[topIdx] < 60 ? (
+                <Text style={s.warn}>
+                  The AI isn't very sure about this one. Try a closer photo with the problem in the center.
+                </Text>
+              ) : (
+                <Text style={s.small}>AI results can be wrong. Tap the "i" button to learn more.</Text>
+              )}
             </View>
 
             {topType === 'none' ? (
@@ -267,17 +268,42 @@ export default function Scan() {
                     multiline
                     style={s.input}
                   />
+                </View>
+
+                {/* Uploads: the person types the nearest address (required).
+                    Camera: just a note that the phone's location will be used. */}
+                {isUpload ? (
+                <View style={s.card}>
+                  <Text style={s.barLabel}>Where was this photo taken?</Text>
+                  <TextInput
+                    value={address}
+                    onChangeText={setAddress}
+                    placeholder="e.g. 120 Main St, or Main St & 3rd Ave"
+                    placeholderTextColor="#7A828A"
+                    style={[s.input, { minHeight: 48 }]}
+                  />
                   <Text style={s.small}>
-                    {photoCoords
-                      ? "We'll pin this where the photo was taken."
-                      : 'Your location is attached only when you tap Send. We never track you.'}
+                    Type the nearest address or cross streets, plus the town, since you might not be there now.
                   </Text>
                 </View>
+                ) : (
+                  <View style={s.card}>
+                    <Text style={s.barLabel}>Location</Text>
+                    <Text style={s.small}>
+                      We'll use your current location when you tap Send, since you're at the problem. It's only read
+                      once, and we never track you.
+                    </Text>
+                  </View>
+                )}
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <Pressable style={s.secondary} onPress={reset}>
                     <Text style={s.secondaryText}>Retake</Text>
                   </Pressable>
-                  <Pressable style={[s.primary, { flex: 1 }]} onPress={send} disabled={sending}>
+                  <Pressable
+                    style={[s.primary, { flex: 1 }, isUpload && !address.trim() && { opacity: 0.5 }]}
+                    onPress={send}
+                    disabled={sending || (isUpload && !address.trim())}
+                  >
                     {sending ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryText}>Send report</Text>}
                   </Pressable>
                 </View>
@@ -294,9 +320,11 @@ export default function Scan() {
             </View>
             <Text style={s.big}>Report sent</Text>
             <Text style={[s.sub, { textAlign: 'center' }]}>
-              {usedGps
-                ? 'Your report is on the community map. Neighbors can upvote it.'
-                : 'Report saved without your location. You can add the spot from the map.'}
+              {pinned
+                ? `Pinned ${sentStreet.startsWith('Near ') ? 'near' + sentStreet.slice(4) : 'near ' + sentStreet}. Neighbors can now see and upvote it.`
+                : isUpload
+                  ? "We couldn't find that address on the map, so the report is saved without a pin. It still shows on Home."
+                  : 'Report saved without a location, so it shows on Home but not as a map pin.'}
             </Text>
             <Pressable
               style={[s.primary, { alignSelf: 'stretch', marginTop: 8 }]}
@@ -340,6 +368,7 @@ const s = StyleSheet.create({
   bar: { height: '100%', borderRadius: 4 },
   input: { minHeight: 64, borderWidth: 1, borderColor: '#CDD1C9', borderRadius: 12, padding: 12, fontSize: 15, color: C.ink, backgroundColor: '#FAFBF8', textAlignVertical: 'top' },
   small: { fontSize: 12, color: C.muted },
+  warn: { fontSize: 13, fontWeight: '600', color: C.orangeText, backgroundColor: C.orangeSoft, padding: 10, borderRadius: 10, overflow: 'hidden' },
   fine: { backgroundColor: C.greenSoft, color: '#1E4D2E', padding: 16, borderRadius: 18, overflow: 'hidden', fontSize: 15, fontWeight: '600' },
   primary: { height: 52, borderRadius: 14, backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
   primaryText: { color: '#fff', fontSize: 16, fontWeight: '700' },

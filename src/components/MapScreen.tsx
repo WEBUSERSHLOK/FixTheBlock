@@ -1,12 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+// MapScreen.tsx (phone version)
+// Shows every report as a pin on a real map. Tap a pin to see details and upvote.
+// The browser uses MapScreen.web.tsx instead, since this map only works on phones.
+
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
-import { C, MAP_CENTER, STATUS, Status, TYPE_LABELS } from '../constants/fmb';
+import { C, REPORT_ZOOM, STATUS, Status, TYPE_LABELS, US_REGION } from '../constants/fmb';
 import { timeAgo, useReports } from '../lib/ReportsContext';
+import { confirmAction } from '../lib/confirm';
 
+// The filter buttons above the map.
 const FILTERS: { id: 'all' | Status; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'open', label: 'Open' },
@@ -15,10 +21,11 @@ const FILTERS: { id: 'all' | Status; label: string }[] = [
 ];
 
 export default function MapScreen() {
-  const { reports, toggleVote } = useReports();
+  const { reports, toggleVote, removeReport } = useReports();
   const params = useLocalSearchParams<{ id?: string }>();
-  const [filter, setFilter] = useState<'all' | Status>('all');
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [filter, setFilter] = useState<'all' | Status>('all'); // which filter is on
+  const [selectedId, setSelectedId] = useState<number | null>(null); // which pin was tapped
+  const mapRef = useRef<MapView>(null); // lets us move the map from code
 
   // When Home or Scan sends us here with an id, select that report.
   useEffect(() => {
@@ -28,11 +35,21 @@ export default function MapScreen() {
     }
   }, [params.id]);
 
+  // Only reports with a location that match the current filter get pins.
   const visible = useMemo(
-    () => reports.filter((r) => filter === 'all' || r.status === filter),
+    () => reports.filter((r) => r.located && (filter === 'all' || r.status === filter)),
     [reports, filter]
   );
+  // The full report for the tapped pin, used by the details card at the bottom.
   const sel = reports.find((r) => r.id === selectedId);
+
+  // When a report is selected (tapped pin, or opened from Home or Scan),
+  // zoom the map in to it.
+  useEffect(() => {
+    if (sel?.located) {
+      mapRef.current?.animateToRegion({ latitude: sel.latitude, longitude: sel.longitude, ...REPORT_ZOOM }, 600);
+    }
+  }, [selectedId]);
 
   return (
     <SafeAreaView style={s.screen} edges={['top']}>
@@ -48,10 +65,13 @@ export default function MapScreen() {
         </View>
       </View>
 
+      {/* The map. Tapping empty space closes the details card.
+          Each report becomes a pin colored by its status. */}
       <MapView
         style={{ flex: 1 }}
         showsUserLocation
-        initialRegion={{ ...MAP_CENTER, latitudeDelta: 0.02, longitudeDelta: 0.02 }}
+        ref={mapRef}
+        initialRegion={US_REGION}
         onPress={() => setSelectedId(null)}
       >
         {visible.map((r) => (
@@ -67,6 +87,7 @@ export default function MapScreen() {
         ))}
       </MapView>
 
+      {/* Details card for the selected report, with the upvote button */}
       {sel && (
         <View style={s.sheet}>
           <View style={s.sheetTop}>
@@ -88,12 +109,29 @@ export default function MapScreen() {
               <Text style={s.closeText}>Close</Text>
             </Pressable>
           </View>
+          {/* Only the person who made a report can remove it, for example if the
+              AI picked the wrong issue type. */}
+          {sel.mine && (
+            <Pressable
+              style={s.removeBtn}
+              onPress={() =>
+                confirmAction('Remove this report?', 'It will be taken off the map for everyone.', 'Remove', () => {
+                  removeReport(sel.id);
+                  setSelectedId(null);
+                })
+              }
+            >
+              <Ionicons name="trash-outline" size={18} color={C.orangeText} />
+              <Text style={s.removeText}>Remove report</Text>
+            </Pressable>
+          )}
         </View>
       )}
     </SafeAreaView>
   );
 }
 
+// Styles for this screen
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.ground },
   header: { padding: 20, paddingBottom: 12, gap: 4 },
@@ -111,5 +149,7 @@ const s = StyleSheet.create({
   voteBtnOn: { backgroundColor: C.blue },
   voteBtnText: { fontSize: 15, fontWeight: '700', color: C.blue },
   closeBtn: { height: 48, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: '#DADDD6', justifyContent: 'center' },
+  removeBtn: { height: 44, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  removeText: { fontSize: 15, fontWeight: '700', color: C.orangeText },
   closeText: { fontSize: 15, fontWeight: '700', color: C.ink },
 });
