@@ -33,7 +33,9 @@
           "imageWidth": 76
         }
       ],
-      "expo-image"
+      "expo-image",
+      "expo-mail-composer",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

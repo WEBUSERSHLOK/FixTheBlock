@@ -13,6 +13,8 @@ import { router } from 'expo-router';
 import { C, ISSUE_TYPES, IssueType, TYPE_LABELS } from '../../constants/fmb';
 import { useReports } from '../../lib/ReportsContext';
 import { addressNear, findAddress } from '../../lib/address';
+import { useTownship } from '../../lib/TownshipContext';
+import { newlyUnlocked } from '../../lib/achievements';
 import TMClassifier from '../../components/TMClassifier';
 import type { ClassifierHandle } from '../../lib/classifier';
 
@@ -35,7 +37,10 @@ export default function Scan() {
   const cameraRef = useRef<CameraView>(null);
   // The Teachable Machine model (see components/TMClassifier).
   const tmRef = useRef<ClassifierHandle>(null);
-  const { addReport } = useReports();
+  // Which camera is on: 'back' (default, for photographing problems) or 'front'.
+  const [facing, setFacing] = useState<'back' | 'front'>('back');
+  const { reports, addReport } = useReports();
+  const { sendReport } = useTownship();
 
   // Everything this screen keeps track of while making a report.
 
@@ -179,7 +184,15 @@ export default function Scan() {
             <Text style={s.h1}>Report a problem</Text>
             <Text style={s.sub}>Point at the issue and tap the shutter.</Text>
             <View style={s.viewfinder}>
-              <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" />
+              <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} />
+              {/* Switches between the back and front (selfie) camera */}
+              <Pressable
+                accessibilityLabel="Switch camera"
+                onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
+                style={s.flip}
+              >
+                <Ionicons name="camera-reverse-outline" size={24} color="#fff" />
+              </Pressable>
             </View>
             <View style={{ alignItems: 'center' }}>
               <Pressable accessibilityLabel="Take photo and analyze" onPress={shoot} style={s.shutter}>
@@ -318,7 +331,17 @@ export default function Scan() {
             <View style={s.check}>
               <Ionicons name="checkmark" size={36} color={C.green} />
             </View>
-            <Text style={s.big}>Report sent</Text>
+            <Text style={s.big}>Report posted</Text>
+            {/* Celebrate any badge this report just unlocked */}
+            {newlyUnlocked(
+              reports.filter((x) => x.id !== newId),
+              reports
+            ).map((b) => (
+              <View key={b.id} style={s.unlockBadge}>
+                <Ionicons name="trophy" size={18} color={C.green} />
+                <Text style={s.unlockText}>New badge: {b.title}</Text>
+              </View>
+            ))}
             <Text style={[s.sub, { textAlign: 'center' }]}>
               {pinned
                 ? `Pinned ${sentStreet.startsWith('Near ') ? 'near' + sentStreet.slice(4) : 'near ' + sentStreet}. Neighbors can now see and upvote it.`
@@ -326,14 +349,28 @@ export default function Scan() {
                   ? "We couldn't find that address on the map, so the report is saved without a pin. It still shows on Home."
                   : 'Report saved without a location, so it shows on Home but not as a map pin.'}
             </Text>
+            {/* Opens a filled-out email to the township. Once it's sent, the
+                report changes to "Sent to town". */}
             <Pressable
-              style={[s.primary, { alignSelf: 'stretch', marginTop: 8 }]}
+              style={[s.primary, { alignSelf: 'stretch', marginTop: 8, flexDirection: 'row', gap: 8 }]}
+              onPress={() => {
+                const r = reports.find((x) => x.id === newId);
+                if (r) sendReport(r);
+              }}
+            >
+              <Ionicons name="mail-outline" size={20} color="#fff" />
+              <Text style={s.primaryText}>
+                {reports.find((x) => x.id === newId)?.status === 'reported' ? 'Sent to township' : 'Email it to the township'}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[s.secondary, { alignSelf: 'stretch' }]}
               onPress={() => {
                 reset();
                 router.push({ pathname: '/map', params: { id: String(newId) } });
               }}
             >
-              <Text style={s.primaryText}>View on map</Text>
+              <Text style={s.secondaryText}>View on map</Text>
             </Pressable>
             <Pressable style={[s.secondary, { alignSelf: 'stretch' }]} onPress={reset}>
               <Text style={s.secondaryText}>Report another</Text>
@@ -353,6 +390,7 @@ const s = StyleSheet.create({
   h1: { fontSize: 24, fontWeight: '800', color: C.ink },
   sub: { fontSize: 14, color: C.muted, lineHeight: 20 },
   viewfinder: { height: 360, borderRadius: 22, overflow: 'hidden', backgroundColor: '#20262C' },
+  flip: { position: 'absolute', top: 14, right: 14, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(16,20,24,0.6)', alignItems: 'center', justifyContent: 'center' },
   shutter: { width: 76, height: 76, borderRadius: 38, borderWidth: 5, borderColor: C.blue, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   shutterInner: { width: 56, height: 56, borderRadius: 28, backgroundColor: C.blue },
   analyzingBadge: { position: 'absolute', bottom: 20, alignSelf: 'center', flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: 'rgba(16,20,24,0.85)', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 },
@@ -374,5 +412,7 @@ const s = StyleSheet.create({
   primaryText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   secondary: { height: 52, borderRadius: 14, borderWidth: 1, borderColor: '#CDD1C9', backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 },
   secondaryText: { color: C.ink, fontSize: 16, fontWeight: '700' },
+  unlockBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.greenSoft, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
+  unlockText: { fontSize: 14, fontWeight: '700', color: C.green },
   check: { width: 72, height: 72, borderRadius: 36, backgroundColor: C.greenSoft, alignItems: 'center', justifyContent: 'center' },
 });

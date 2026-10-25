@@ -11,6 +11,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { C, REPORT_ZOOM, STATUS, Status, TYPE_LABELS, US_REGION } from '../constants/fmb';
 import { timeAgo, useReports } from '../lib/ReportsContext';
 import { confirmAction } from '../lib/confirm';
+import { useTownship } from '../lib/TownshipContext';
 
 // The filter buttons above the map.
 const FILTERS: { id: 'all' | Status; label: string }[] = [
@@ -21,7 +22,8 @@ const FILTERS: { id: 'all' | Status; label: string }[] = [
 ];
 
 export default function MapScreen() {
-  const { reports, toggleVote, removeReport } = useReports();
+  const { reports, toggleVote, removeReport, setStatus } = useReports();
+  const { sendReport } = useTownship();
   const params = useLocalSearchParams<{ id?: string }>();
   const [filter, setFilter] = useState<'all' | Status>('all'); // which filter is on
   const [selectedId, setSelectedId] = useState<number | null>(null); // which pin was tapped
@@ -109,6 +111,42 @@ export default function MapScreen() {
               <Text style={s.closeText}>Close</Text>
             </Pressable>
           </View>
+          {/* Moving the report along: email it to the township if it hasn't been
+              sent yet, and mark it fixed once it's repaired. */}
+          {/* Marked fixed by mistake? This puts it back to what it was before
+              (Sent to town or Open). */}
+          {sel.status === 'fixed' && (
+            <View style={{ flexDirection: 'row' }}>
+            <Pressable
+              style={s.stepBtn}
+              onPress={() => setStatus(sel.id, sel.prevStatus && sel.prevStatus !== 'fixed' ? sel.prevStatus : 'open')}
+            >
+              <Ionicons name="arrow-undo-outline" size={18} color={C.ink} />
+              <Text style={s.stepText}>Undo: not fixed yet</Text>
+            </Pressable>
+            </View>
+          )}
+          {sel.status !== 'fixed' && (
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              {sel.status === 'open' && (
+                <Pressable style={s.stepBtn} onPress={() => sendReport(sel)}>
+                  <Ionicons name="mail-outline" size={18} color={C.ink} />
+                  <Text style={s.stepText}>Send to township</Text>
+                </Pressable>
+              )}
+              <Pressable
+                style={s.stepBtn}
+                onPress={() =>
+                  confirmAction('Mark as fixed?', 'Only do this once the problem has actually been repaired.', 'Mark fixed', () =>
+                    setStatus(sel.id, 'fixed')
+                  )
+                }
+              >
+                <Ionicons name="checkmark-circle-outline" size={18} color={C.green} />
+                <Text style={[s.stepText, { color: C.green }]}>Mark as fixed</Text>
+              </Pressable>
+            </View>
+          )}
           {/* Only the person who made a report can remove it, for example if the
               AI picked the wrong issue type. */}
           {sel.mine && (
@@ -149,6 +187,8 @@ const s = StyleSheet.create({
   voteBtnOn: { backgroundColor: C.blue },
   voteBtnText: { fontSize: 15, fontWeight: '700', color: C.blue },
   closeBtn: { height: 48, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: '#DADDD6', justifyContent: 'center' },
+  stepBtn: { flex: 1, height: 44, borderRadius: 12, borderWidth: 1, borderColor: '#DADDD6', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  stepText: { fontSize: 14, fontWeight: '700', color: C.ink },
   removeBtn: { height: 44, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   removeText: { fontSize: 15, fontWeight: '700', color: C.orangeText },
   closeText: { fontSize: 15, fontWeight: '700', color: C.ink },

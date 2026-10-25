@@ -54,6 +54,9 @@ export const STATUS: Record<Status, { label: string; bg: string; fg: string; pin
 // folder where model.json, metadata.json, and weights.bin are hosted.
 export const MODEL_URL = 'https://raw.githubusercontent.com/WEBUSERSHLOK/FixTheBlock/master/model/';
 
+// The app's name, used in emails. Change it here to rename everywhere it's used.
+export const APP_NAME = 'FixMyBlock';
+
 // The map opens zoomed out to show the whole United States. The deltas are how
 // much of the map fits on screen (bigger numbers = more zoomed out).
 export const US_REGION = { latitude: 39.5, longitude: -98.35, latitudeDelta: 32, longitudeDelta: 40 };

@@ -1,19 +1,15 @@
-import type { ComponentProps } from 'react';
+// _layout.tsx (tabs)
+// Builds the tab bar at the bottom of the app. Each Tabs.Screen below
+// matches a file in this folder: index.tsx, map.tsx, scan.tsx, impact.tsx, badges.tsx.
+
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { C } from '../../constants/fmb';
 
-type IconName = ComponentProps<typeof Ionicons>['name'];
-
-function icon(name: IconName) {
-  return ({ color, size }: { color: string; size: number }) => (
-    <Ionicons name={name} color={color as string} size={size} />
-  );
-}
-
 export default function TabsLayout() {
   return (
-        <Tabs
+    <Tabs
+      // Styling shared by every tab: blue when selected, gray otherwise.
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: C.blue,
@@ -48,6 +44,13 @@ export default function TabsLayout() {
         options={{
           title: 'Impact',
           tabBarIcon: ({ color, size }) => <Ionicons name="trending-up-outline" color={color as string} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="badges"
+        options={{
+          title: 'Badges',
+          tabBarIcon: ({ color, size }) => <Ionicons name="trophy-outline" color={color as string} size={size} />,
         }}
       />
     </Tabs>

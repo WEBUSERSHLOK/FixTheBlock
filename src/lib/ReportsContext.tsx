@@ -21,16 +21,18 @@ export type Report = {
   located: boolean; // false if the person didn't share a location, so there's no pin
   note?: string;
   photoUri?: string;
-  mine?: boolean; // true if this person made the report, so they can remove it
+  mine?: boolean;
+  prevStatus?: Status; // the status before the last change, so it can be undone // true if this person made the report, so they can remove it
 };
 
 // Everything the screens can use from this file: the list of reports,
-// plus functions to upvote, add a new report, and remove one.
+// plus functions to upvote, add, remove, and change a report's status.
 type Ctx = {
   reports: Report[];
   toggleVote: (id: number) => void;
   addReport: (r: Omit<Report, 'id' | 'createdAt' | 'votes' | 'voted' | 'status' | 'mine'>) => number;
   removeReport: (id: number) => void;
+  setStatus: (id: number, status: Status) => void;
 };
 
 // A React Context is like a shared storage box. Any screen inside the
@@ -61,8 +63,16 @@ export function ReportsProvider({ children }: { children: React.ReactNode }) {
   // Deletes a report, for example if the AI picked the wrong issue type.
   const removeReport = (id: number) => setReports((rs) => rs.filter((r) => r.id !== id));
 
+  // Moves a report to a new stage, like 'reported' after it's emailed to the
+  // township, or 'fixed' once the problem is repaired.
+  // Also remembers the old status in prevStatus, so a mistake can be undone.
+  const setStatus = (id: number, status: Status) =>
+    setReports((rs) => rs.map((r) => (r.id === id ? { ...r, prevStatus: r.status, status } : r)));
+
   return (
-    <ReportsContext.Provider value={{ reports, toggleVote, addReport, removeReport }}>{children}</ReportsContext.Provider>
+    <ReportsContext.Provider value={{ reports, toggleVote, addReport, removeReport, setStatus }}>
+      {children}
+    </ReportsContext.Provider>
   );
 }
 
