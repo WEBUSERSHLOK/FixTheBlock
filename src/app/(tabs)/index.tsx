@@ -2,7 +2,7 @@
 // The first screen people see: a button to report a problem, totals for each
 // status, and the most upvoted open problems in the community.
 
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -25,10 +25,9 @@ export default function Home() {
       <ScrollView contentContainerStyle={s.content}>
         {/* App logo and name */}
         <View style={s.brandRow}>
-          <View style={s.logo}>
-            <Ionicons name="construct-outline" size={20} color="#fff" />
-          </View>
-          <Text style={s.brand}>FixMyBlock</Text>
+          {/* The app's logo, from assets/logo.png in the main project folder */}
+          <Image source={require('../../../assets/images/FTB.png')} style={s.logo} accessibilityLabel="FixTheBlock logo" />
+          <Text style={s.brand}>FixTheBlock</Text>
         </View>
 
         {/* Reports are only shared within a town, so ask for it first */}
@@ -126,7 +125,7 @@ const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.ground },
   content: { padding: 20, gap: 16 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  logo: { width: 36, height: 36, borderRadius: 10, backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center' },
+  logo: { width: 48, height: 48, borderRadius: 12 },
   brand: { fontSize: 20, fontWeight: '800', color: C.ink },
   hero: { backgroundColor: C.blue, borderRadius: 20, padding: 22, gap: 12 },
   heroKicker: { color: '#C9DAF0', fontSize: 13, fontWeight: '600' },

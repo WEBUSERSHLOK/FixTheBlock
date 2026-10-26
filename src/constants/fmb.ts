@@ -55,7 +55,7 @@ export const STATUS: Record<Status, { label: string; bg: string; fg: string; pin
 export const MODEL_URL = 'https://raw.githubusercontent.com/WEBUSERSHLOK/FixTheBlock/master/model/';
 
 // The app's name, used in emails. Change it here to rename everywhere it's used.
-export const APP_NAME = 'FixMyBlock';
+export const APP_NAME = 'FixTheBlock';
 
 // The map opens zoomed out to show the whole United States. The deltas are how
 // much of the map fits on screen (bigger numbers = more zoomed out).

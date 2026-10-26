@@ -3,6 +3,7 @@
 // problem is, then send it as a report pinned to a location.
 
 import { useRef, useState } from 'react';
+import type { ComponentRef } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -17,7 +18,6 @@ import { useTownship } from '../../lib/TownshipContext';
 import { newlyUnlocked } from '../../lib/achievements';
 import TMClassifier from '../../components/TMClassifier';
 import type { ClassifierHandle } from '../../lib/classifier';
-import type { ComponentRef } from 'react';
 
 // The screen moves through four steps:
 // camera (take or upload a photo) -> analyzing (AI is thinking)
@@ -181,7 +181,7 @@ export default function Scan() {
         <Ionicons name="camera-outline" size={40} color={C.blue} />
         <Text style={s.h1}>Camera access needed</Text>
         <Text style={[s.sub, { textAlign: 'center' }]}>
-          FixMyBlock uses the camera to photograph the problem. Photos are only sent when you tap Send report.
+          FixTheBlock uses the camera to photograph the problem. Photos are only sent when you tap Send report.
         </Text>
         <Pressable style={s.primary} onPress={requestPermission}>
           <Text style={s.primaryText}>Allow camera</Text>

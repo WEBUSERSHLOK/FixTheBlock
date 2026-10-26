@@ -14,7 +14,7 @@ const POINTS: { icon: ComponentProps<typeof Ionicons>['name']; title: string; bo
   {
     icon: 'sparkles-outline',
     title: 'The AI can make mistakes',
-    body: 'FixMyBlock uses an AI model to guess the type of problem in your photo. It is usually right, but not always, so check the result before you send a report.',
+    body: 'FixTheBlock uses an AI model to guess the type of problem in your photo. It is usually right, but not always, so check the result before you send a report.',
   },
   {
     icon: 'images-outline',
