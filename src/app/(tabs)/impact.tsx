@@ -13,7 +13,7 @@ import { emailSummary, monthLabel, shareSummary } from '../../lib/summary';
 export default function Impact() {
   const { reports } = useReports();
   const [busy, setBusy] = useState(false); // true while the PDF is being made
-  const { townshipEmail, editEmail } = useTownship();
+  const { town, state, email: townshipEmail, hasTown, editTownship, editEmail } = useTownship();
 
   // How many problems have been fixed so far.
   const fixed = reports.filter((r) => r.status === 'fixed').length;
@@ -80,11 +80,13 @@ export default function Impact() {
         </View>
 
         <View style={s.card}>
-          {/* Where reports get emailed. Each person sets their own township. */}
-          <Text style={s.h2}>Your township</Text>
-          <Text style={s.sub}>{townshipEmail || 'No email set yet. You\'ll be asked the first time you send a report.'}</Text>
-          <Pressable onPress={editEmail} style={[s.btn, { backgroundColor: C.blueSoft }]}>
-            <Text style={[s.btnText, { color: C.blue }]}>{townshipEmail ? 'Change email' : 'Add email'}</Text>
+          {/* Your town decides which reports you see, and the email is where
+              reports get sent. Each person sets their own. */}
+          <Text style={s.h2}>Your town</Text>
+          <Text style={s.sub}>{hasTown ? `${town}, ${state}` : 'Not set yet. Set it to see reports from your town.'}</Text>
+          <Text style={s.sub}>{townshipEmail ? `Reports go to ${townshipEmail}` : 'No township email yet.'}</Text>
+          <Pressable onPress={editTownship} style={[s.btn, { backgroundColor: C.blueSoft }]}>
+            <Text style={[s.btnText, { color: C.blue }]}>{hasTown ? 'Change town or email' : 'Set your town'}</Text>
           </Pressable>
         </View>
 

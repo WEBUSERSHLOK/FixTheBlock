@@ -1,12 +1,14 @@
 // MapScreen.web.tsx (browser version)
-// The map library doesn't run in a web browser, so on web the Map tab shows
-// the same reports as a list instead. Phones use MapScreen.tsx.
+// The phone map library doesn't run in a web browser, so the browser uses
+// Leaflet instead: a free web map library that draws OpenStreetMap maps, with
+// no account or key needed. Below the map is the same list of reports, with
+// all the buttons. Phones use MapScreen.tsx.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
-import { C, STATUS, Status, TYPE_LABELS } from '../constants/fmb';
+import { C, STATUS, Status, TYPE_LABELS, US_REGION } from '../constants/fmb';
 import { timeAgo, useReports } from '../lib/ReportsContext';
 import { confirmAction } from '../lib/confirm';
 import { useTownship } from '../lib/TownshipContext';
@@ -18,6 +20,31 @@ const FILTERS: { id: 'all' | Status; label: string }[] = [
   { id: 'reported', label: 'Sent to town' },
   { id: 'fixed', label: 'Fixed' },
 ];
+
+// Leaflet is loaded from the internet the first time the Map tab opens: its
+// style sheet (so the map looks right) and its code. It's only loaded once.
+const LEAFLET_VERSION = '1.9.4';
+let leafletPromise: Promise<any> | null = null;
+function loadLeaflet(): Promise<any> {
+  if ((window as any).L) return Promise.resolve((window as any).L);
+  if (!leafletPromise) {
+    leafletPromise = new Promise((resolve, reject) => {
+      const css = document.createElement('link');
+      css.rel = 'stylesheet';
+      css.href = `https://unpkg.com/leaflet@${LEAFLET_VERSION}/dist/leaflet.css`;
+      document.head.appendChild(css);
+      const js = document.createElement('script');
+      js.src = `https://unpkg.com/leaflet@${LEAFLET_VERSION}/dist/leaflet.js`;
+      js.onload = () => resolve((window as any).L);
+      js.onerror = () => {
+        leafletPromise = null; // allow another try next time
+        reject(new Error("Couldn't load the map"));
+      };
+      document.head.appendChild(js);
+    });
+  }
+  return leafletPromise;
+}
 
 export default function MapScreenWeb() {
   const { reports, toggleVote, removeReport, setStatus } = useReports();
@@ -35,12 +62,68 @@ export default function MapScreenWeb() {
   }, [params.id]);
 
   // Only the reports that match the current filter.
-  const visible = reports.filter((r) => filter === 'all' || r.status === filter);
+  const visible = useMemo(() => reports.filter((r) => filter === 'all' || r.status === filter), [reports, filter]);
+
+  // The map lives in a plain web <div>. These refs hold the div, the Leaflet
+  // map, and the layer the pins are drawn on, so the code can update them.
+  const mapDiv = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<any>(null);
+  const pinsRef = useRef<any>(null);
+  const [L, setL] = useState<any>(null); // the Leaflet library, once loaded
+  const [mapFailed, setMapFailed] = useState(false);
+
+  // Load Leaflet when the screen opens.
+  useEffect(() => {
+    loadLeaflet().then(setL).catch(() => setMapFailed(true));
+  }, []);
+
+  // Create the map once Leaflet is ready: start zoomed out on the whole US,
+  // with OpenStreetMap's street tiles (credit to OpenStreetMap is required).
+  useEffect(() => {
+    if (!L || !mapDiv.current || mapRef.current) return;
+    const map = L.map(mapDiv.current).setView([US_REGION.latitude, US_REGION.longitude], 4);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+    pinsRef.current = L.layerGroup().addTo(map);
+    mapRef.current = map;
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, [L]);
+
+  // Redraw the pins whenever the reports, filter, or selection change.
+  // Each pin is a circle in its status color; the selected one is bigger.
+  useEffect(() => {
+    if (!L || !pinsRef.current) return;
+    pinsRef.current.clearLayers();
+    for (const r of visible) {
+      if (!r.located) continue;
+      L.circleMarker([r.latitude, r.longitude], {
+        radius: r.id === selectedId ? 12 : 8,
+        color: '#ffffff',
+        weight: 3,
+        fillColor: STATUS[r.status].pin,
+        fillOpacity: 1,
+      })
+        .bindTooltip(`${TYPE_LABELS[r.type]}: ${r.street}`)
+        .on('click', () => setSelectedId(r.id))
+        .addTo(pinsRef.current);
+    }
+  }, [L, visible, selectedId]);
+
+  // Fly to a report when it's selected (tapped pin, card, or opened from Home).
+  useEffect(() => {
+    const sel = reports.find((r) => r.id === selectedId);
+    if (mapRef.current && sel?.located) mapRef.current.flyTo([sel.latitude, sel.longitude], 16, { duration: 0.8 });
+  }, [selectedId, L]);
 
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.content}>
       <Text style={s.h1}>Community map</Text>
-      <Text style={s.sub}>The live map runs on phones. Here are the same reports as a list.</Text>
+      <Text style={s.sub}>Click a pin or a report to see details.</Text>
 
       <View style={s.chips}>
         {FILTERS.map((f) => (
@@ -48,6 +131,12 @@ export default function MapScreenWeb() {
             <Text style={[s.chipText, filter === f.id && { color: '#fff' }]}>{f.label}</Text>
           </Pressable>
         ))}
+      </View>
+
+      {/* The map. On the web, a plain <div> works here, and Leaflet draws into it. */}
+      <View style={s.mapBox}>
+        <div ref={mapDiv} style={{ width: '100%', height: '100%' }} />
+        {mapFailed && <Text style={s.mapError}>Couldn't load the map. The reports are still listed below.</Text>}
       </View>
 
       {visible.length === 0 && (
@@ -142,6 +231,8 @@ export default function MapScreenWeb() {
 
 // Styles for this screen
 const s = StyleSheet.create({
+  mapBox: { height: 420, borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: C.border, backgroundColor: '#E6E9E1' },
+  mapError: { position: 'absolute', top: 16, left: 16, right: 16, fontSize: 14, color: C.muted },
   screen: { flex: 1, backgroundColor: C.ground },
   content: { padding: 20, gap: 12, maxWidth: 640, width: '100%', alignSelf: 'center' },
   h1: { fontSize: 24, fontWeight: '800', color: C.ink },

@@ -1,18 +1,29 @@
+// index.tsx (Home tab)
+// The first screen people see: a button to report a problem, totals for each
+// status, and the most upvoted open problems in the community.
+
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { C, STATUS } from '../../constants/fmb';
 import { timeAgo, useReports } from '../../lib/ReportsContext';
+import { useTownship } from '../../lib/TownshipContext';
 
 export default function Home() {
-  const { reports, toggleVote } = useReports();
+  const { reports, toggleVote, loading, error } = useReports();
+  const { town, hasTown, editTownship } = useTownship();
+
+  // Counts how many reports are in a given status (open, reported, fixed).
   const count = (s: string) => reports.filter((r) => r.status === s).length;
+
+  // The 4 most upvoted problems that aren't fixed yet, for the list below.
   const top = [...reports].filter((r) => r.status !== 'fixed').sort((a, b) => b.votes - a.votes).slice(0, 4);
 
   return (
     <SafeAreaView style={s.screen} edges={['top']}>
       <ScrollView contentContainerStyle={s.content}>
+        {/* App logo and name */}
         <View style={s.brandRow}>
           <View style={s.logo}>
             <Ionicons name="construct-outline" size={20} color="#fff" />
@@ -20,8 +31,24 @@ export default function Home() {
           <Text style={s.brand}>FixMyBlock</Text>
         </View>
 
+        {/* Reports are only shared within a town, so ask for it first */}
+        {!hasTown && (
+          <Pressable style={s.townCard} onPress={editTownship}>
+            <Ionicons name="location-outline" size={22} color={C.blue} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.cardTitle}>Set your town</Text>
+              <Text style={s.cardMeta}>You'll see reports from your neighbors, and they'll see yours.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={C.muted} />
+          </Pressable>
+        )}
+
+        {/* Shown if the app can't reach the community server */}
+        {error && <Text style={s.error}>{error}</Text>}
+
+        {/* Big blue card with the main "Report a problem" button, which opens the Scan tab */}
         <View style={s.hero}>
-          <Text style={s.heroKicker}>Your neighborhood</Text>
+          <Text style={s.heroKicker}>{hasTown ? town : 'Your neighborhood'}</Text>
           <Text style={s.heroTitle}>See a problem?{'\n'}Snap it in 10 seconds.</Text>
           <Text style={s.heroBody}>
             AI identifies the issue, tags the spot, and sends a ready report to your township.
@@ -32,12 +59,15 @@ export default function Home() {
           </Pressable>
         </View>
 
+        {/* Quick totals for each status */}
         <View style={s.stats}>
           <Stat n={count('open')} label="Open" color={STATUS.open.fg} />
           <Stat n={count('reported')} label="Sent to town" color={STATUS.reported.fg} />
           <Stat n={count('fixed')} label="Fixed" color={STATUS.fixed.fg} />
         </View>
 
+        {/* "Most upvoted nearby" list. Tapping a report opens it on the map,
+            and the arrow button upvotes it. */}
         <View style={s.sectionRow}>
           <Text style={s.h2}>Most upvoted nearby</Text>
           <Pressable onPress={() => router.push('/map')} hitSlop={12}>
@@ -45,7 +75,7 @@ export default function Home() {
           </Pressable>
         </View>
 
-        {top.length === 0 && (
+        {top.length === 0 && !loading && (
           <View style={s.empty}>
             <Text style={s.cardTitle}>No open reports yet</Text>
             <Text style={s.cardMeta}>When you or a neighbor reports a problem, it shows up here.</Text>
@@ -81,6 +111,7 @@ export default function Home() {
   );
 }
 
+// One of the three number boxes (Open, Sent to town, Fixed).
 function Stat({ n, label, color }: { n: number; label: string; color: string }) {
   return (
     <View style={s.stat}>
@@ -90,6 +121,7 @@ function Stat({ n, label, color }: { n: number; label: string; color: string }) 
   );
 }
 
+// Styles for this screen
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.ground },
   content: { padding: 20, gap: 16 },
@@ -113,6 +145,8 @@ const s = StyleSheet.create({
   pill: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, overflow: 'hidden', fontSize: 12, fontWeight: '700' },
   cardTitle: { fontSize: 15, fontWeight: '700', color: C.ink },
   cardMeta: { fontSize: 13, color: C.muted },
+  townCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.blueSoft, borderRadius: 16, padding: 14 },
+  error: { backgroundColor: C.orangeSoft, color: C.orangeText, padding: 12, borderRadius: 12, overflow: 'hidden', fontSize: 14, fontWeight: '600' },
   empty: { backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderStyle: 'dashed', borderRadius: 16, padding: 18, gap: 4 },
   vote: { width: 52, height: 56, borderRadius: 14, borderWidth: 1, borderColor: '#DADDD6', alignItems: 'center', justifyContent: 'center' },
   voteOn: { backgroundColor: C.blue, borderColor: C.blue },

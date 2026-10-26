@@ -17,6 +17,7 @@ import { useTownship } from '../../lib/TownshipContext';
 import { newlyUnlocked } from '../../lib/achievements';
 import TMClassifier from '../../components/TMClassifier';
 import type { ClassifierHandle } from '../../lib/classifier';
+import type { ComponentRef } from 'react';
 
 // The screen moves through four steps:
 // camera (take or upload a photo) -> analyzing (AI is thinking)
@@ -37,10 +38,19 @@ export default function Scan() {
   const cameraRef = useRef<CameraView>(null);
   // The Teachable Machine model (see components/TMClassifier).
   const tmRef = useRef<ClassifierHandle>(null);
+
+  // When someone taps a text box, the keyboard covers the bottom half of the
+  // screen. These remember where the note and address boxes are, so the screen
+  // can scroll them up above the keyboard.
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const noteY = useRef(0);
+  const addressY = useRef(0);
+  const scrollToBox = (y: number) =>
+    setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true }), 250);
   // Which camera is on: 'back' (default, for photographing problems) or 'front'.
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const { reports, addReport } = useReports();
-  const { sendReport } = useTownship();
+  const { sendReport, hasTown, editTownship } = useTownship();
 
   // Everything this screen keeps track of while making a report.
 
@@ -115,6 +125,11 @@ export default function Scan() {
   //   find the nearest street address for the label. We never track anyone.
   // If no location is available, the report still saves, just without a pin.
   const send = async () => {
+    // Reports belong to a town, so the town has to be set first.
+    if (!hasTown) {
+      editTownship();
+      return;
+    }
     setSending(true);
     let coords: { latitude: number; longitude: number } | null = null;
     let street = 'Location not shared';
@@ -133,8 +148,8 @@ export default function Scan() {
     setPinned(!!coords);
     setSentStreet(street);
 
-    // Save the report so it shows up on every tab.
-    const id = addReport({
+    // Save the report to the community database so it shows up for everyone.
+    const id = await addReport({
       type: topType,
       title: `${TYPE_LABELS[topType]} reported`,
       street,
@@ -145,6 +160,11 @@ export default function Scan() {
       longitude: coords?.longitude ?? 0,
       located: !!coords,
     });
+    if (id === null) {
+      setSending(false);
+      Alert.alert("Couldn't post the report", 'Check your internet connection and try again.');
+      return;
+    }
     setNewId(id);
     setSending(false);
     setStep('done');
@@ -177,7 +197,14 @@ export default function Scan() {
     <SafeAreaView style={s.screen} edges={['top']}>
       {/* Invisible: loads the AI model in the background */}
       <TMClassifier ref={tmRef} />
-      <ScrollView contentContainerStyle={s.content}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={s.content}
+        // Leaves room for the keyboard so the bottom of the form can scroll into view
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
         {/* STEP 1: live camera, shutter button, and upload option */}
         {step === 'camera' && (
           <>
@@ -271,11 +298,12 @@ export default function Scan() {
               </>
             ) : (
               <>
-                <View style={s.card}>
+                <View style={s.card} onLayout={(e) => (noteY.current = e.nativeEvent.layout.y)}>
                   <Text style={s.barLabel}>Add a note (optional)</Text>
                   <TextInput
                     value={note}
                     onChangeText={setNote}
+                    onFocus={() => scrollToBox(noteY.current)}
                     placeholder="e.g. About 2 ft wide, cars swerving around it"
                     placeholderTextColor="#7A828A"
                     multiline
@@ -286,11 +314,12 @@ export default function Scan() {
                 {/* Uploads: the person types the nearest address (required).
                     Camera: just a note that the phone's location will be used. */}
                 {isUpload ? (
-                <View style={s.card}>
+                <View style={s.card} onLayout={(e) => (addressY.current = e.nativeEvent.layout.y)}>
                   <Text style={s.barLabel}>Where was this photo taken?</Text>
                   <TextInput
                     value={address}
                     onChangeText={setAddress}
+                    onFocus={() => scrollToBox(addressY.current)}
                     placeholder="e.g. 120 Main St, or Main St & 3rd Ave"
                     placeholderTextColor="#7A828A"
                     style={[s.input, { minHeight: 48 }]}
